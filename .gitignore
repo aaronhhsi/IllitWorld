@@ -41,3 +41,15 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Dev tools and scripts
+scripts/
+
+# Dev documentation (not part of the product)
+FIREBASE_SETUP.md
+HASHMAP_OPTIMIZATION.md
+IMAGE_SETUP_GUIDE.md
+VIDEO_UNLOCK_SYSTEM.md
+
+# Windows artifacts
+nul
