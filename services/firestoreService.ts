@@ -15,6 +15,7 @@ export interface UserGameData {
   showPhotos: boolean;
   watchedVideos: Record<string, number>; // Map of video ID -> timestamp when completed (0 = not watched)
   favoriteVideos?: Record<string, boolean>;
+  selectedBackground?: string;
   lastUpdated: number;
 }
 

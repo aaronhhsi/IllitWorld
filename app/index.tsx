@@ -22,6 +22,11 @@ import DevTools from '../components/DevTools';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Background images
+const BACKGROUNDS: { id: string; name: string; source: any }[] = [
+  { id: 'japanese-classroom', name: 'Japanese Classroom', source: require('../assets/images/japaneseclassroomcreduJamoues.webp') },
+];
+
 // Game configuration - easy to tweak
 const GAME_CONFIG = {
   XP_PER_VIDEO: 50,
@@ -275,8 +280,14 @@ export default function HomeScreen() {
   const [playHistory, setPlayHistory] = useState<Video[]>([]);
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   const [favoriteVideos, setFavoriteVideos] = useState<Record<string, boolean>>({});
+  const [selectedBackground, setSelectedBackground] = useState<string>('japanese-classroom');
   const cardPositions = useRef<Position[]>([]);
   const hasLoadedData = useRef(false);
+  // Remembers how the queue was built so loops can re-evaluate the source list
+  const queueSourceRef = useRef<{ getList: () => Video[], shuffle: boolean }>({
+    getList: () => videos,
+    shuffle: false,
+  });
 
   // Set layout ready after mount to prevent flash of mispositioned cards
   useEffect(() => {
@@ -315,6 +326,9 @@ export default function HomeScreen() {
             if (gameData.favoriteVideos) {
               setFavoriteVideos(gameData.favoriteVideos);
             }
+            if (gameData.selectedBackground) {
+              setSelectedBackground(gameData.selectedBackground);
+            }
 
             console.log('Loaded game data for user:', user.email);
           } else {
@@ -323,6 +337,7 @@ export default function HomeScreen() {
             setShowPhotos(false);
             setWatchedVideos({});
             setFavoriteVideos({});
+            setSelectedBackground('japanese-classroom');
             console.log('No saved data found, starting fresh');
           }
           hasLoadedData.current = true;
@@ -337,6 +352,7 @@ export default function HomeScreen() {
         setShowPhotos(false);
         setWatchedVideos({});
         setFavoriteVideos({});
+        setSelectedBackground('japanese-classroom');
         setAutoPlayEnabled(false);
         setSelectedVideo(null);
         setIsVideoPlaying(false);
@@ -359,6 +375,7 @@ export default function HomeScreen() {
             showPhotos,
             watchedVideos,
             favoriteVideos,
+            selectedBackground,
             lastUpdated: Date.now(),
           });
           console.log('Game data saved for user:', user.email);
@@ -369,7 +386,7 @@ export default function HomeScreen() {
     };
 
     saveUserData();
-  }, [characters, showPhotos, watchedVideos, favoriteVideos, user]);
+  }, [characters, showPhotos, watchedVideos, favoriteVideos, selectedBackground, user]);
 
   // Calculate fixed slot positions in a horizontal row
   const getSlotPosition = (index: number, total: number): Position => {
@@ -446,7 +463,7 @@ export default function HomeScreen() {
   };
 
   const handleVideoEnd = () => {
-    if (autoPlayEnabled && autoPlayQueue.length > 0) {
+    if (autoPlayEnabled && (autoPlayQueue.length > 0 || playHistory.length > 0)) {
       handleVideoNext();
     }
   };
@@ -469,32 +486,64 @@ export default function HomeScreen() {
     const index = gridVideos.findIndex(v => v.id === video.id);
     setPlayHistory(index > 0 ? gridVideos.slice(0, index) : []);
     setAutoPlayQueue(index < gridVideos.length - 1 ? gridVideos.slice(index + 1) : []);
+    queueSourceRef.current = { getList: getFilteredVideos, shuffle: false };
     setSelectedVideo(video);
     setIsVideoPlaying(true);
     setHasRewarded(false); // Reset reward flag for new video
   };
 
-  // Go back to previous video in history
-  const handleVideoPrev = () => {
-    if (playHistory.length === 0) return;
-    const prev = playHistory[playHistory.length - 1];
-    setPlayHistory(playHistory.slice(0, -1));
-    // Push current video back to front of queue
-    if (selectedVideo) {
-      setAutoPlayQueue([selectedVideo, ...autoPlayQueue]);
+  // Regenerate a fresh list from the queue source (for looping)
+  const getFreshQueueList = (): Video[] => {
+    let list = queueSourceRef.current.getList();
+    if (queueSourceRef.current.shuffle) {
+      list = [...list];
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
     }
+    return list;
+  };
+
+  // Go back to previous video in history (loops via fresh source list if at start)
+  const handleVideoPrev = () => {
+    if (playHistory.length > 0) {
+      const prev = playHistory[playHistory.length - 1];
+      setPlayHistory(playHistory.slice(0, -1));
+      if (selectedVideo) {
+        setAutoPlayQueue([selectedVideo, ...autoPlayQueue]);
+      }
+      setSelectedVideo(prev);
+      setHasRewarded(false);
+      return;
+    }
+    // Loop: regenerate from source and go to last video
+    const freshList = getFreshQueueList();
+    if (freshList.length === 0) return;
+    const prev = freshList[freshList.length - 1];
+    setPlayHistory(freshList.slice(0, -1));
+    setAutoPlayQueue([]);
     setSelectedVideo(prev);
     setHasRewarded(false);
   };
 
-  // Skip to next video in queue
+  // Skip to next video in queue (loops via fresh source list if at end)
   const handleVideoNext = () => {
-    if (autoPlayQueue.length === 0) return;
-    const [nextVideo, ...rest] = autoPlayQueue;
-    // Push current video onto history
-    if (selectedVideo) {
-      setPlayHistory([...playHistory, selectedVideo]);
+    if (autoPlayQueue.length > 0) {
+      const [nextVideo, ...rest] = autoPlayQueue;
+      if (selectedVideo) {
+        setPlayHistory([...playHistory, selectedVideo]);
+      }
+      setAutoPlayQueue(rest);
+      setSelectedVideo(nextVideo);
+      setHasRewarded(false);
+      return;
     }
+    // Loop: regenerate from source and go to first video
+    const freshList = getFreshQueueList();
+    if (freshList.length === 0) return;
+    const [nextVideo, ...rest] = freshList;
+    setPlayHistory([]);
     setAutoPlayQueue(rest);
     setSelectedVideo(nextVideo);
     setHasRewarded(false);
@@ -524,9 +573,12 @@ export default function HomeScreen() {
     if (ordered.length === 0) return;
     const [first, ...rest] = ordered;
     setAutoPlayQueue(rest);
+    setPlayHistory([]);
+    queueSourceRef.current = { getList: getUnwatchedOrdered, shuffle: false };
     setSelectedVideo(first);
     setIsVideoPlaying(true);
     setHasRewarded(false);
+    setAutoPlayEnabled(true);
   };
 
   // Shuffle play unwatched videos
@@ -541,9 +593,12 @@ export default function HomeScreen() {
     }
     const [first, ...rest] = shuffled;
     setAutoPlayQueue(rest);
+    setPlayHistory([]);
+    queueSourceRef.current = { getList: getUnwatchedOrdered, shuffle: true };
     setSelectedVideo(first);
     setIsVideoPlaying(true);
     setHasRewarded(false);
+    setAutoPlayEnabled(true);
   };
 
   const isPhotoCardUnlocked = (photoCard: PhotoCard, characterLevel: number): boolean => {
@@ -614,6 +669,12 @@ export default function HomeScreen() {
         colors={['#0f0c29', '#302b63', '#24243e']}
         style={styles.background}
       />
+      {showPhotos && selectedBackground && (() => {
+        const bg = BACKGROUNDS.find(b => b.id === selectedBackground);
+        return bg ? (
+          <Image source={bg.source} style={styles.backgroundImage} resizeMode="cover" />
+        ) : null;
+      })()}
 
       {/* Floating particles effect */}
       <View style={styles.particlesContainer}>
@@ -855,12 +916,27 @@ export default function HomeScreen() {
             {/* Tab Content */}
             <ScrollView style={styles.collectionContent}>
               {collectionTab === 'background' ? (
-                <View style={styles.collectionPlaceholder}>
-                  <Text style={styles.collectionPlaceholderIcon}>🎨</Text>
-                  <Text style={styles.collectionPlaceholderTitle}>Backgrounds</Text>
-                  <Text style={styles.collectionPlaceholderText}>
-                    Unlock new backgrounds by watching videos! Coming soon.
-                  </Text>
+                <View style={styles.collectionEraSection}>
+                  <Text style={styles.collectionEraTitle}>Backgrounds</Text>
+                  <View style={styles.collectionCardGrid}>
+                    {BACKGROUNDS.map((bg) => {
+                      const isSelected = selectedBackground === bg.id;
+                      return (
+                        <View key={bg.id} style={styles.collectionCardWrapper}>
+                          <TouchableOpacity
+                            style={[
+                              styles.collectionCardItem,
+                              isSelected && styles.collectionCardSelected,
+                            ]}
+                            onPress={() => setSelectedBackground(isSelected ? '' : bg.id)}
+                          >
+                            <Image source={bg.source} style={styles.backgroundThumbnail} resizeMode="cover" />
+                          </TouchableOpacity>
+                          <Text style={styles.collectionCardName} numberOfLines={1}>{bg.name}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               ) : (
                 /* Member photo cards */
@@ -952,12 +1028,55 @@ export default function HomeScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Watch Videos</Text>
-              <TouchableOpacity
-                onPress={() => setVideoModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
+              <View style={styles.videoHeaderButtons}>
+                <TouchableOpacity
+                  style={styles.videoHeaderPlayButton}
+                  onPress={() => {
+                    const filtered = getFilteredVideos();
+                    if (filtered.length === 0) return;
+                    const [first, ...rest] = filtered;
+                    setAutoPlayQueue(rest);
+                    setPlayHistory([]);
+                    queueSourceRef.current = { getList: getFilteredVideos, shuffle: false };
+                    setSelectedVideo(first);
+                    setIsVideoPlaying(true);
+                    setHasRewarded(false);
+                    setAutoPlayEnabled(true);
+                  }}
+                  disabled={getFilteredVideos().length === 0}
+                >
+                  <Text style={styles.videoHeaderPlayButtonText}>▶</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.videoHeaderShuffleButton}
+                  onPress={() => {
+                    const filtered = getFilteredVideos();
+                    if (filtered.length === 0) return;
+                    const shuffled = [...filtered];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                      const j = Math.floor(Math.random() * (i + 1));
+                      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    const [first, ...rest] = shuffled;
+                    setAutoPlayQueue(rest);
+                    setPlayHistory([]);
+                    queueSourceRef.current = { getList: getFilteredVideos, shuffle: true };
+                    setSelectedVideo(first);
+                    setIsVideoPlaying(true);
+                    setHasRewarded(false);
+                    setAutoPlayEnabled(true);
+                  }}
+                  disabled={getFilteredVideos().length === 0}
+                >
+                  <Text style={styles.videoHeaderShuffleButtonText}>🔀</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setVideoModalVisible(false)}
+                  style={styles.closeButton}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Video Filter Tabs */}
@@ -1051,8 +1170,8 @@ export default function HomeScreen() {
           <View style={styles.videoPlayerHeader}>
             <TouchableOpacity
               onPress={handleVideoPrev}
-              style={[styles.backButton, playHistory.length === 0 && styles.navButtonDisabled]}
-              disabled={playHistory.length === 0}
+              style={[styles.backButton, (playHistory.length === 0 && autoPlayQueue.length === 0) && styles.navButtonDisabled]}
+              disabled={playHistory.length === 0 && autoPlayQueue.length === 0}
             >
               <Text style={styles.backButtonText}>←</Text>
             </TouchableOpacity>
@@ -1061,8 +1180,8 @@ export default function HomeScreen() {
             )}
             <TouchableOpacity
               onPress={handleVideoNext}
-              style={[styles.nextButton, autoPlayQueue.length === 0 && styles.navButtonDisabled]}
-              disabled={autoPlayQueue.length === 0}
+              style={[styles.nextButton, (autoPlayQueue.length === 0 && playHistory.length === 0) && styles.navButtonDisabled]}
+              disabled={autoPlayQueue.length === 0 && playHistory.length === 0}
             >
               <Text style={styles.nextButtonText}>→</Text>
             </TouchableOpacity>
@@ -1234,6 +1353,20 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
   },
+  backgroundImage: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  backgroundThumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
   particlesContainer: {
     position: 'absolute',
     width: '100%',
@@ -1264,12 +1397,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     left: 20,
-    backgroundColor: 'rgba(255, 107, 157, 0.2)',
+    backgroundColor: 'rgba(255, 107, 157, 0.45)',
     width: 50,
     height: 50,
     borderRadius: 25,
     borderWidth: 2,
-    borderColor: 'rgba(255, 107, 157, 0.5)',
+    borderColor: 'rgba(255, 107, 157, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
@@ -1281,12 +1414,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     right: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     zIndex: 100,
   },
   authButtonText: {
@@ -1396,12 +1529,12 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   testButton: {
     backgroundColor: 'rgba(255, 215, 0, 0.2)',
@@ -1919,7 +2052,7 @@ const styles = StyleSheet.create({
   playButton: {
     width: '100%',
     maxWidth: 600,
-    backgroundColor: 'rgba(96, 165, 250, 0.25)',
+    backgroundColor: 'rgba(96, 165, 250, 0.45)',
     paddingVertical: 24,
     borderRadius: 16,
     alignItems: 'center',
@@ -1936,7 +2069,7 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   shuffleButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingVertical: 24,
     paddingHorizontal: 20,
     borderRadius: 16,
@@ -1991,6 +2124,35 @@ const styles = StyleSheet.create({
   favoriteButtonText: {
     fontSize: 18,
     color: '#FF6B9D',
+  },
+  videoHeaderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  videoHeaderPlayButton: {
+    backgroundColor: 'rgba(96, 165, 250, 0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#60A5FA',
+  },
+  videoHeaderPlayButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  videoHeaderShuffleButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  videoHeaderShuffleButtonText: {
+    fontSize: 16,
   },
   autoPlayButton: {
     paddingVertical: 6,
