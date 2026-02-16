@@ -30,26 +30,29 @@ const GAME_CONFIG = {
 
 // Character data - replace with actual images later
 const initialCharacters = [
-  { id: 'yunah', name: 'Yunah', level: 1, xp: 0, color: '#FF6B9D', selectedPhotoCard: 'yunah-run-1' },
-  { id: 'minju', name: 'Minju', level: 1, xp: 0, color: '#C084FC', selectedPhotoCard: 'minju-run-1' },
-  { id: 'moka', name: 'Moka', level: 1, xp: 0, color: '#60A5FA', selectedPhotoCard: 'moka-run-1' },
+  { id: 'yunah', name: 'Yunah', level: 1, xp: 0, color: '#FF6B9D', selectedPhotoCard: 'yunah-misc-1' },
+  { id: 'minju', name: 'Minju', level: 1, xp: 0, color: '#C084FC', selectedPhotoCard: 'minju-misc-1' },
+  { id: 'moka', name: 'Moka', level: 1, xp: 0, color: '#60A5FA', selectedPhotoCard: 'moka-misc-1' },
   { id: 'wonhee', name: 'Wonhee', level: 1, xp: 0, color: '#34D399', selectedPhotoCard: 'wonhee-misc-1' },
-  { id: 'iroha', name: 'Iroha', level: 1, xp: 0, color: '#FBBF24', selectedPhotoCard: 'iroha-run-1' },
+  { id: 'iroha', name: 'Iroha', level: 1, xp: 0, color: '#FBBF24', selectedPhotoCard: 'iroha-misc-1' },
 ];
 
 // Web-specific YouTube Player Component
 const WebYouTubePlayer: React.FC<{
   videoId: string;
   onProgress: () => void;
+  onEnd?: () => void;
   height: number;
-}> = ({ videoId, onProgress, height }) => {
+}> = ({ videoId, onProgress, onEnd, height }) => {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<any>(null);
   const rewardedRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Store callback in a ref so the effect doesn't depend on it
+  // Store callbacks in refs so the effect doesn't depend on them
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
 
   useEffect(() => {
     rewardedRef.current = false;
@@ -66,6 +69,7 @@ const WebYouTubePlayer: React.FC<{
         videoId: videoId,
         width: '100%',
         height: height,
+        playerVars: { autoplay: 1 },
         events: {
           onReady: () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
@@ -92,6 +96,12 @@ const WebYouTubePlayer: React.FC<{
                 if (intervalRef.current) clearInterval(intervalRef.current);
               }
             }, 1000);
+          },
+          onStateChange: (event: any) => {
+            // YT.PlayerState.ENDED === 0
+            if (event.data === 0 && onEndRef.current) {
+              onEndRef.current();
+            }
           },
         },
       });
@@ -258,11 +268,13 @@ export default function HomeScreen() {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [watchedVideos, setWatchedVideos] = useState<Record<string, number>>({});
-  const [selectedVideoFilter, setSelectedVideoFilter] = useState<'All' | 'Music Video' | 'Dance Practice' | 'SUPER ILLIT' | 'Misc' | 'Watched' | 'Unwatched'>('All');
+  const [selectedVideoFilter, setSelectedVideoFilter] = useState<'All' | 'Music Video' | 'Dance Practice' | 'SUPER ILLIT' | 'Misc' | 'Watched' | 'Unwatched' | 'Favorites'>('All');
   const [collectionModalVisible, setCollectionModalVisible] = useState(false);
   const [collectionTab, setCollectionTab] = useState<'background' | 'yunah' | 'minju' | 'moka' | 'wonhee' | 'iroha'>('background');
   const [autoPlayQueue, setAutoPlayQueue] = useState<Video[]>([]);
   const [playHistory, setPlayHistory] = useState<Video[]>([]);
+  const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
+  const [favoriteVideos, setFavoriteVideos] = useState<Record<string, boolean>>({});
   const cardPositions = useRef<Position[]>([]);
   const hasLoadedData = useRef(false);
 
@@ -300,8 +312,17 @@ export default function HomeScreen() {
             }
             setWatchedVideos(watchedVideosData);
 
+            if (gameData.favoriteVideos) {
+              setFavoriteVideos(gameData.favoriteVideos);
+            }
+
             console.log('Loaded game data for user:', user.email);
           } else {
+            // New user with no saved data - reset to defaults
+            setCharacters(initialCharacters);
+            setShowPhotos(false);
+            setWatchedVideos({});
+            setFavoriteVideos({});
             console.log('No saved data found, starting fresh');
           }
           hasLoadedData.current = true;
@@ -310,8 +331,17 @@ export default function HomeScreen() {
           hasLoadedData.current = true;
         }
       } else {
-        // User signed out, reset the flag
+        // User signed out, reset to guest defaults
         hasLoadedData.current = false;
+        setCharacters(initialCharacters);
+        setShowPhotos(false);
+        setWatchedVideos({});
+        setFavoriteVideos({});
+        setAutoPlayEnabled(false);
+        setSelectedVideo(null);
+        setIsVideoPlaying(false);
+        setAutoPlayQueue([]);
+        setPlayHistory([]);
       }
     };
 
@@ -328,6 +358,7 @@ export default function HomeScreen() {
             characters,
             showPhotos,
             watchedVideos,
+            favoriteVideos,
             lastUpdated: Date.now(),
           });
           console.log('Game data saved for user:', user.email);
@@ -338,7 +369,7 @@ export default function HomeScreen() {
     };
 
     saveUserData();
-  }, [characters, showPhotos, watchedVideos, user]);
+  }, [characters, showPhotos, watchedVideos, favoriteVideos, user]);
 
   // Calculate fixed slot positions in a horizontal row
   const getSlotPosition = (index: number, total: number): Position => {
@@ -414,7 +445,30 @@ export default function HomeScreen() {
     console.log(`Awarded ${xpEarned} XP (${secondsWatched}s watched) to all characters!`);
   };
 
+  const handleVideoEnd = () => {
+    if (autoPlayEnabled && autoPlayQueue.length > 0) {
+      handleVideoNext();
+    }
+  };
+
+  const toggleFavorite = (videoId: string) => {
+    setFavoriteVideos(prev => {
+      const updated = { ...prev };
+      if (updated[videoId]) {
+        delete updated[videoId];
+      } else {
+        updated[videoId] = true;
+      }
+      return updated;
+    });
+  };
+
   const handleVideoPress = (video: Video) => {
+    // Build queue from the current grid order so back/next navigate through all videos
+    const gridVideos = getFilteredVideos();
+    const index = gridVideos.findIndex(v => v.id === video.id);
+    setPlayHistory(index > 0 ? gridVideos.slice(0, index) : []);
+    setAutoPlayQueue(index < gridVideos.length - 1 ? gridVideos.slice(index + 1) : []);
     setSelectedVideo(video);
     setIsVideoPlaying(true);
     setHasRewarded(false); // Reset reward flag for new video
@@ -454,11 +508,13 @@ export default function HomeScreen() {
     setPlayHistory([]);
   };
 
-  // Get unwatched videos ordered: music videos first, then others
+  // Get unwatched videos ordered: music videos first, then others.
+  // Falls back to all videos if everything has been watched.
   const getUnwatchedOrdered = (): Video[] => {
     const unwatched = videos.filter(v => !watchedVideos[v.id]);
-    const musicVideos = unwatched.filter(v => v.category === 'Music Video');
-    const others = unwatched.filter(v => v.category !== 'Music Video');
+    const list = unwatched.length > 0 ? unwatched : videos;
+    const musicVideos = list.filter(v => v.category === 'Music Video');
+    const others = list.filter(v => v.category !== 'Music Video');
     return [...musicVideos, ...others];
   };
 
@@ -538,6 +594,8 @@ export default function HomeScreen() {
         return videos.filter(v => watchedVideos[v.id]);
       case 'Unwatched':
         return videos.filter(v => !watchedVideos[v.id]);
+      case 'Favorites':
+        return videos.filter(v => favoriteVideos[v.id]);
       case 'Music Video':
       case 'Dance Practice':
       case 'SUPER ILLIT':
@@ -909,7 +967,7 @@ export default function HomeScreen() {
               style={styles.videoFilterContainer}
               contentContainerStyle={styles.videoFilterContent}
             >
-              {(['All', 'Music Video', 'Dance Practice', 'SUPER ILLIT', 'Misc', 'Watched', 'Unwatched'] as const).map((filter) => (
+              {(['All', 'Favorites', 'Music Video', 'Dance Practice', 'SUPER ILLIT', 'Misc', 'Watched', 'Unwatched'] as const).map((filter) => (
                 <TouchableOpacity
                   key={filter}
                   style={[
@@ -950,6 +1008,16 @@ export default function HomeScreen() {
                           {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
                         </Text>
                       </View>
+                      {/* Favorite button */}
+                      <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={(e) => { e.stopPropagation(); toggleFavorite(video.id); }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.favoriteButtonText}>
+                          {favoriteVideos[video.id] ? '♥' : '♡'}
+                        </Text>
+                      </TouchableOpacity>
                       {/* Watched progress bar at bottom of thumbnail */}
                       {watchedVideos[video.id] && (
                         <View style={styles.videoWatchedBar} />
@@ -998,6 +1066,14 @@ export default function HomeScreen() {
             >
               <Text style={styles.nextButtonText}>→</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAutoPlayEnabled(!autoPlayEnabled)}
+              style={[styles.autoPlayButton, autoPlayEnabled && styles.autoPlayButtonActive]}
+            >
+              <Text style={[styles.autoPlayButtonText, autoPlayEnabled && styles.autoPlayButtonTextActive]}>
+                {autoPlayEnabled ? '▶▶ Auto' : '▶▶ Auto'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={handleVideoExit} style={styles.exitButton}>
               <Text style={styles.exitButtonText}>✕</Text>
             </TouchableOpacity>
@@ -1009,6 +1085,7 @@ export default function HomeScreen() {
                 <WebYouTubePlayer
                   videoId={selectedVideo.youtubeId}
                   onProgress={handleVideoComplete}
+                  onEnd={handleVideoEnd}
                   height={Math.min(SCREEN_WIDTH * (9 / 16), SCREEN_HEIGHT - 80)}
                 />
               ) : (
@@ -1017,6 +1094,11 @@ export default function HomeScreen() {
                     height={Math.min(SCREEN_WIDTH * (9 / 16), SCREEN_HEIGHT - 80)}
                     play={true}
                     videoId={selectedVideo.youtubeId}
+                    onChangeState={(state: string) => {
+                      if (state === 'ended') {
+                        handleVideoEnd();
+                      }
+                    }}
                     onProgress={(progress: { currentTime: number; duration: number }) => {
                       const percentWatched = progress.currentTime / progress.duration;
                       console.log(`Native: Progress ${(percentWatched * 100).toFixed(1)}%`);
@@ -1102,16 +1184,14 @@ export default function HomeScreen() {
       {/* Play / Shuffle row */}
       <View style={styles.playRow}>
         <TouchableOpacity
-          style={[styles.playButton, getUnwatchedOrdered().length === 0 && styles.playButtonDisabled]}
+          style={styles.playButton}
           onPress={handleAutoPlay}
-          disabled={getUnwatchedOrdered().length === 0}
         >
           <Text style={styles.playButtonText}>▶  Play</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.shuffleButton, getUnwatchedOrdered().length === 0 && styles.playButtonDisabled]}
+          style={styles.shuffleButton}
           onPress={handleShufflePlay}
-          disabled={getUnwatchedOrdered().length === 0}
         >
           <Text style={styles.shuffleButtonText}>🔀</Text>
         </TouchableOpacity>
@@ -1896,5 +1976,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  favoriteButtonText: {
+    fontSize: 18,
+    color: '#FF6B9D',
+  },
+  autoPlayButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginLeft: 8,
+  },
+  autoPlayButtonActive: {
+    backgroundColor: 'rgba(96, 165, 250, 0.3)',
+    borderWidth: 1,
+    borderColor: '#60A5FA',
+  },
+  autoPlayButtonText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontWeight: '600',
+  },
+  autoPlayButtonTextActive: {
+    color: '#60A5FA',
   },
 });

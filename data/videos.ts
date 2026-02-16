@@ -95,6 +95,15 @@ export const videos: Video[] = [
     duration: 170, // 2:50
     category: 'Music Video',
   },
+  {
+    id: 'almond-chocolate-mv',
+    youtubeId: 'qlgEadao-Sk',
+    title: 'ILLIT - Almond Chocolate (MV)',
+    description: 'Watch to earn XP for all characters!',
+    xpReward: GAME_CONFIG.XP_PER_VIDEO,
+    duration: 226, // 3:46
+    category: 'Music Video',
+  },
   // Not Cute Anymore Era
   {
     id: 'not-cute-anymore',

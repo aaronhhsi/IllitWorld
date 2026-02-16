@@ -37,7 +37,7 @@ const ERA_CONFIG: Record<string, EraConfig> = {
   bomb: { name: 'Bomb',              unlockType: 'video',    unlockRequirement: 'do-the-dance' },
   tyt:  { name: 'Toki Yo Tomare',    unlockType: 'video',    unlockRequirement: 'toki-yo-tomare' },
   nca:  { name: 'Not Cute Anymore',  unlockType: 'video',    unlockRequirement: 'not-cute-anymore' },
-  misc: { name: 'Misc.',             unlockType: 'purchase', unlockRequirement: 0 },
+  misc: { name: 'Misc.',             unlockType: 'default',  unlockRequirement: 0 },
 };
 
 // Member colors used for card gradients
