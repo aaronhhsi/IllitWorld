@@ -1410,7 +1410,6 @@ export default function HomeScreen() {
             styles.playButton,
             {
               paddingVertical: Math.max(16, screenDimensions.width * 0.015),
-              maxWidth: Math.min(600, screenDimensions.width * 0.8),
             }
           ]}
           onPress={handleAutoPlay}
@@ -2163,11 +2162,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
     gap: 12,
   },
   playButton: {
-    width: '100%',
+    flex: 1,
     maxWidth: 600,
+    minWidth: 120,
     backgroundColor: 'rgba(96, 165, 250, 0.45)',
     paddingVertical: 24,
     borderRadius: 16,
