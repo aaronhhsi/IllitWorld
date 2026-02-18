@@ -2,7 +2,7 @@
 
 A gamified K-pop fan app where you watch official ILLIT content to level up character cards and unlock photo card collections for each member: Yunah, Minju, Moka, Wonhee, and Iroha.
 
-Built with React Native + Expo, Firebase for auth/persistence, and YouTube for video playback.
+Built with React Native + Expo, Supabase for auth/persistence, and YouTube for video playback.
 
 ## Getting Started
 
@@ -35,7 +35,7 @@ The web version is the easiest to test — just press `w` after `npm start`.
 
 ### Signing In
 
-The app uses Google Sign-In via Firebase. Click "Sign In" in the top-right corner of the main screen. Your progress (levels, watched videos, favorites, photo cards) syncs to the cloud so it persists across sessions and devices.
+The app uses Google Sign-In via Supabase Auth. Click "Sign In" in the top-right corner of the main screen. Your progress (levels, watched videos, favorites, photo cards) syncs to the cloud so it persists across sessions and devices.
 
 Without signing in you can still use the app, but progress is lost when you close it.
 
@@ -43,25 +43,60 @@ Without signing in you can still use the app, but progress is lost when you clos
 
 When running in dev mode (`npm start`), go to Settings (gear icon) while signed in to access DevTools — buttons that add/remove XP and levels for quick testing.
 
+#### Image Tool
+
+A local web UI for adding member photo card images. Upload a photo, crop it to the 2:3 card ratio, select the member and era, and it auto-saves to the correct folder at the right size.
+
+```bash
+npm run image-tool
+# then open http://localhost:3456
+```
+
+1. Drop or browse for a JPG, PNG, or WebP image
+2. Drag the crop box to frame the shot (locked to 2:3 ratio)
+3. Select the member and era
+4. Click **Process & save** — the image is cropped, resized to 800×1200, compressed to ≤350KB, and saved to `assets/images/members/<member>/`
+
+Supported era codes: `run`, `srm`, `ily`, `tyt`, `bomb`, `nca`, `misc`
+
+Saved files are named `<era>-<n>.jpg` (e.g. `srm-3.jpg`) and are auto-detected by the app on the next build/reload — no code changes needed.
+
+#### YouTube Playlist Import
+
+Fetches all videos from a YouTube playlist and appends new entries to `data/videos.ts`. Safe to re-run — videos already in the file are skipped.
+
+**Prerequisites:**
+1. Enable **YouTube Data API v3** in [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Library
+2. Create a plain **API key** under Credentials → Create credentials → API key
+3. Get the **playlist ID** from the URL: `youtube.com/playlist?list=`**PLxxxxxxxxxx**
+
+```bash
+node scripts/import-playlist.js <PLAYLIST_ID> <API_KEY>
+```
+
+Category is auto-detected from the video title (`M/V` → Music Video, `Dance Practice` → Dance Practice, `SUPER ILLIT` → SUPER ILLIT, anything else → Misc). After running, search for `category: 'Misc'` in `data/videos.ts` to review and fix any miscategorized entries.
+
 ---
 
 ## Project Structure
 
 ```
-app/index.tsx           Main game screen (characters, video player, modals)
-app/_layout.tsx         Root layout, wraps the app in AuthProvider
+app/index.tsx              Main game screen (characters, video player, modals)
+app/_layout.tsx            Root layout, wraps the app in AuthProvider
 
-config/firebase.ts      Firebase init (Auth + Firestore)
-contexts/AuthContext.tsx Google sign-in provider & useAuth() hook
-services/firestoreService.ts  Save/load game data to Firestore
+config/supabase.ts         Supabase client init (Auth + database)
+contexts/AuthContext.tsx   Google sign-in provider & useAuth() hook
+services/gameDataService.ts  Save/load game data to Supabase
 
-data/videos.ts          YouTube video list (14 videos across 6+ eras)
-data/photoCards.ts      Auto-generated photo card data from image files
+data/videos.ts             YouTube video list
+data/photoCards.ts         Auto-generated photo card data from image files
 
 assets/images/members/          Member photo card images (.jpg)
 assets/images/members/index.ts  Auto-detect system using require.context
 
-components/DevTools.tsx  Dev-only XP/Level testing buttons
+components/DevTools.tsx    Dev-only XP/Level testing buttons
+scripts/import-playlist.js  CLI tool — bulk-import videos from a YouTube playlist
+scripts/image-tool-server.js  Local web UI — add and crop member photo images
 ```
 
 ---
@@ -169,4 +204,4 @@ The code includes a migration path from the old array format ([index.tsx:314](ap
 
 When signed in, all game state auto-saves to Firestore on every change via a `useEffect` that watches `[characters, showPhotos, watchedVideos, favoriteVideos, selectedBackground, user]` ([index.tsx:368](app/index.tsx#L368)). A `hasLoadedData` ref prevents the initial default state from overwriting cloud data before load completes.
 
-Data lives at `users/{firebaseUserId}` in Firestore with the schema defined in `services/firestoreService.ts`.
+Data lives in the `user_game_data` table in Supabase Postgres, keyed by the Supabase user UUID. Row Level Security ensures each user can only access their own row. The schema and service functions are in `services/gameDataService.ts`.

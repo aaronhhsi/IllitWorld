@@ -18,7 +18,7 @@ import DevTools from '../components/DevTools';
 import { useAuth } from '../contexts/AuthContext';
 import { PhotoCard, photoCardData } from '../data/photoCards';
 import { Video, videos } from '../data/videos';
-import { loadGameData, saveGameData } from '../services/firestoreService';
+import { loadGameData, saveGameData } from '../services/gameDataService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -391,7 +391,7 @@ export default function HomeScreen() {
     const loadUserData = async () => {
       if (user) {
         try {
-          const gameData = await loadGameData(user.uid);
+          const gameData = await loadGameData(user.id);
           if (gameData) {
             setCharacters(gameData.characters);
             setShowPhotos(gameData.showPhotos);
@@ -458,7 +458,7 @@ export default function HomeScreen() {
       // Only save if user is signed in AND we've loaded their data
       if (user && hasLoadedData.current) {
         try {
-          await saveGameData(user.uid, {
+          await saveGameData(user.id, {
             characters,
             showPhotos,
             watchedVideos,
