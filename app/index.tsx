@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -10,17 +11,52 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
-import { videos, Video } from '../data/videos';
-import { photoCardData, PhotoCard } from '../data/photoCards';
-import { useAuth } from '../contexts/AuthContext';
-import { saveGameData, loadGameData } from '../services/firestoreService';
 import { getMemberPhoto } from '../assets/images/members';
 import DevTools from '../components/DevTools';
+import { useAuth } from '../contexts/AuthContext';
+import { PhotoCard, photoCardData } from '../data/photoCards';
+import { Video, videos } from '../data/videos';
+import { loadGameData, saveGameData } from '../services/firestoreService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Card sizing constants
+const NUM_CARDS = 5;
+const SPACING_RATIO = 0.1; // 10% spacing between cards (increased for better visual separation)
+
+// Helper function to calculate card dimensions based on screen width
+const calculateCardDimensions = (screenWidth: number) => {
+  // Responsive margins: smaller on mobile, larger on desktop
+  // Mobile (<768px): 20px total margin
+  // Tablet (768-1024px): 40px + extra based on width
+  // Desktop (>1024px): Enough margin so cards don't exceed max width
+  let sideMargin = 20;
+  if (screenWidth > 1024) {
+    // On desktop, calculate margin to center cards at max width
+    const maxCardWidth = 180;
+    const maxTotalCardWidth = (maxCardWidth * NUM_CARDS) + (maxCardWidth * SPACING_RATIO * (NUM_CARDS - 1));
+    if (screenWidth > maxTotalCardWidth + 100) {
+      // Add substantial margins on desktop
+      sideMargin = Math.max(100, (screenWidth - maxTotalCardWidth) * 0.3);
+    } else {
+      sideMargin = 60;
+    }
+  } else if (screenWidth > 768) {
+    sideMargin = 40;
+  }
+
+  // Total available width for cards
+  const availableWidth = screenWidth - sideMargin;
+  // Calculate: availableWidth = NUM_CARDS * cardWidth + (NUM_CARDS - 1) * (cardWidth * SPACING_RATIO)
+  // Simplify: availableWidth = cardWidth * (NUM_CARDS + (NUM_CARDS - 1) * SPACING_RATIO)
+  const cardWidth = availableWidth / (NUM_CARDS + (NUM_CARDS - 1) * SPACING_RATIO);
+  // Cap at reasonable min/max values
+  const finalCardWidth = Math.min(Math.max(cardWidth, 50), 180);
+  const finalCardHeight = (finalCardWidth / 180) * 240; // keep aspect ratio
+  return { width: finalCardWidth, height: finalCardHeight, margin: sideMargin };
+};
 
 // Background images
 const BACKGROUNDS: { id: string; name: string; source: any }[] = [
@@ -145,20 +181,22 @@ interface Position {
   y: number;
 }
 
-interface DraggableCardProps {
+interface CharacterCardProps {
   character: typeof initialCharacters[0];
   position: Position;
-  slotIndex: number;
   onPress: () => void;
   showPhotos: boolean;
+  cardWidth: number;
+  cardHeight: number;
 }
 
-const DraggableCard: React.FC<DraggableCardProps> = ({
+const CharacterCard: React.FC<CharacterCardProps> = ({
   character,
   position,
-  slotIndex,
   onPress,
-  showPhotos
+  showPhotos,
+  cardWidth,
+  cardHeight
 }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -207,6 +245,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         {
           left: position.x,
           top: position.y,
+          width: cardWidth,
+          height: cardHeight,
         },
       ]}
     >
@@ -234,9 +274,19 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.infoOverlay}
         >
-          <Text style={styles.characterName}>{character.name}</Text>
+          <Text style={[
+            styles.characterName,
+            {
+              fontSize: Math.max(12, cardWidth * 0.1),
+            }
+          ]}>{character.name}</Text>
           <View style={styles.levelContainer}>
-            <Text style={styles.levelText}>LVL {character.level}</Text>
+            <Text style={[
+              styles.levelText,
+              {
+                fontSize: Math.max(10, cardWidth * 0.067),
+              }
+            ]}>LVL {character.level}</Text>
             <View style={styles.xpBar}>
               <View
                 style={[
@@ -248,7 +298,12 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
               />
             </View>
           </View>
-          <Text style={styles.xpText}>
+          <Text style={[
+            styles.xpText,
+            {
+              fontSize: Math.max(8, cardWidth * 0.056),
+            }
+          ]}>
             {character.xp % GAME_CONFIG.XP_PER_LEVEL}/{GAME_CONFIG.XP_PER_LEVEL} XP
           </Text>
         </LinearGradient>
@@ -281,6 +336,14 @@ export default function HomeScreen() {
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   const [favoriteVideos, setFavoriteVideos] = useState<Record<string, boolean>>({});
   const [selectedBackground, setSelectedBackground] = useState<string>('japanese-classroom');
+
+  // Dynamic card dimensions based on screen width
+  const [screenDimensions, setScreenDimensions] = useState(Dimensions.get('window'));
+  const cardDimensions = calculateCardDimensions(screenDimensions.width);
+  const CARD_WIDTH = cardDimensions.width;
+  const CARD_HEIGHT = cardDimensions.height;
+  const SIDE_MARGIN = cardDimensions.margin;
+
   const cardPositions = useRef<Position[]>([]);
   const hasLoadedData = useRef(false);
   // Remembers how the queue was built so loops can re-evaluate the source list
@@ -288,6 +351,31 @@ export default function HomeScreen() {
     getList: () => videos,
     shuffle: false,
   });
+
+  // Listen for dimension changes (orientation changes, browser resize, etc.)
+  useEffect(() => {
+    // React Native Dimensions listener (for mobile orientation changes)
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenDimensions(window);
+    });
+
+    // Web-specific window resize listener
+    const handleResize = () => {
+      const newDimensions = Dimensions.get('window');
+      setScreenDimensions(newDimensions);
+    };
+
+    if (Platform.OS === 'web') {
+      window.addEventListener('resize', handleResize);
+    }
+
+    return () => {
+      subscription?.remove();
+      if (Platform.OS === 'web') {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
 
   // Set layout ready after mount to prevent flash of mispositioned cards
   useEffect(() => {
@@ -390,23 +478,28 @@ export default function HomeScreen() {
 
   // Calculate fixed slot positions in a horizontal row
   const getSlotPosition = (index: number, total: number): Position => {
-    const cardWidth = 180;
-    const spacing = 20;
-    const totalWidth = (cardWidth + spacing) * total - spacing;
-    const startX = (SCREEN_WIDTH - totalWidth) / 2;
-    const centerY = SCREEN_HEIGHT / 2 - 120;
+    const spacing = CARD_WIDTH * SPACING_RATIO;
+    const totalWidth = (CARD_WIDTH + spacing) * total - spacing;
+    // Center the cards, ensuring they stay within screen bounds
+    const startX = Math.max((screenDimensions.width - totalWidth) / 2, SIDE_MARGIN / 2);
+    const centerY = screenDimensions.height / 2 - CARD_HEIGHT / 2;
 
     return {
-      x: startX + (cardWidth + spacing) * index,
+      x: startX + (CARD_WIDTH + spacing) * index,
       y: centerY,
     };
   };
 
-  // Initialize card positions
-  if (cardPositions.current.length === 0) {
-    cardPositions.current = characters.map((_, i) => 
+  // Recalculate card positions when dimensions or card count changes
+  // Use a stable key based on dimensions and character count to force recalculation
+  const positionKey = `${screenDimensions.width}-${screenDimensions.height}-${characters.length}`;
+  const currentKey = useRef<string>('');
+
+  if (currentKey.current !== positionKey) {
+    cardPositions.current = characters.map((_, i) =>
       getSlotPosition(i, characters.length)
     );
+    currentKey.current = positionKey;
   }
 
   const handleCardPress = (character: typeof initialCharacters[0]) => {
@@ -694,7 +787,13 @@ export default function HomeScreen() {
 
       {/* Title */}
       <View style={styles.header}>
-        <Text style={styles.title}>ILLIT WORLD</Text>
+        <Text style={[
+          styles.title,
+          {
+            fontSize: Math.max(20, Math.min(48, screenDimensions.width * 0.065)),
+            letterSpacing: Math.max(0.5, Math.min(4, screenDimensions.width * 0.005)),
+          }
+        ]}>ILLIT WORLD</Text>
       </View>
 
       {/* Photo Toggle Button - Top Left */}
@@ -727,6 +826,9 @@ export default function HomeScreen() {
             {
               left: pos.x,
               top: pos.y,
+              width: CARD_WIDTH,    // dynamically match card
+              height: CARD_HEIGHT,  // dynamically match card
+              borderRadius: CARD_WIDTH * 0.088, // keep proportional if you want
             },
           ]}
         />
@@ -734,13 +836,14 @@ export default function HomeScreen() {
 
       {/* Character cards */}
       {layoutReady && characters.map((character, index) => (
-        <DraggableCard
+        <CharacterCard
           key={character.id}
           character={character}
           position={cardPositions.current[index]}
-          slotIndex={index}
           onPress={() => handleCardPress(character)}
           showPhotos={showPhotos}
+          cardWidth={CARD_WIDTH}    // dynamically set width
+          cardHeight={CARD_HEIGHT}  // dynamically set height
         />
       ))}
 
@@ -1303,16 +1406,34 @@ export default function HomeScreen() {
       {/* Play / Shuffle row */}
       <View style={styles.playRow}>
         <TouchableOpacity
-          style={styles.playButton}
+          style={[
+            styles.playButton,
+            {
+              paddingVertical: Math.max(16, screenDimensions.width * 0.015),
+              maxWidth: Math.min(600, screenDimensions.width * 0.8),
+            }
+          ]}
           onPress={handleAutoPlay}
         >
-          <Text style={styles.playButtonText}>▶  Play</Text>
+          <Text style={[
+            styles.playButtonText,
+            { fontSize: Math.max(16, screenDimensions.width * 0.013) }
+          ]}>▶  Play</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.shuffleButton}
+          style={[
+            styles.shuffleButton,
+            {
+              paddingVertical: Math.max(16, screenDimensions.width * 0.015),
+              paddingHorizontal: Math.max(16, screenDimensions.width * 0.013),
+            }
+          ]}
           onPress={handleShufflePlay}
         >
-          <Text style={styles.shuffleButtonText}>🔀</Text>
+          <Text style={[
+            styles.shuffleButtonText,
+            { fontSize: Math.max(18, screenDimensions.width * 0.014) }
+          ]}>🔀</Text>
         </TouchableOpacity>
       </View>
 
@@ -1429,9 +1550,6 @@ const styles = StyleSheet.create({
   },
   slotIndicator: {
     position: 'absolute',
-    width: 180,
-    height: 240,
-    borderRadius: 16,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
@@ -1440,8 +1558,6 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     position: 'absolute',
-    width: 180,
-    height: 240,
     zIndex: 100,
   },
   card: {
