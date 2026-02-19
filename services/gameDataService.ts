@@ -31,7 +31,7 @@ export const saveGameData = async (userId: string, gameData: UserGameData): Prom
         favorite_videos: gameData.favoriteVideos ?? {},
         selected_background: gameData.selectedBackground ?? 'japanese-classroom',
         last_updated: Date.now(),
-      });
+      }, { onConflict: 'user_id' });
     if (error) throw error;
     console.log('Game data saved successfully');
   } catch (error) {
