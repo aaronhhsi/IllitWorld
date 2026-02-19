@@ -31,7 +31,7 @@ interface EraConfig {
 const ERA_ORDER = ['run', 'srm', 'ily', 'bomb', 'tyt', 'nca', 'misc'];
 
 const ERA_CONFIG: Record<string, EraConfig> = {
-  run:  { name: 'R U Next?',         unlockType: 'default',  unlockRequirement: 0 },
+  run:  { name: 'R U Next?',         unlockType: 'video',    unlockRequirement: 'aim-high' },
   srm:  { name: 'Super Real Me',     unlockType: 'video',    unlockRequirement: 'magnetic-mv' },
   ily:  { name: "I'll Like You",     unlockType: 'video',    unlockRequirement: 'cherish-mv' },
   bomb: { name: 'Bomb',              unlockType: 'video',    unlockRequirement: 'do-the-dance' },
@@ -47,14 +47,6 @@ const MEMBER_COLORS: Record<string, string> = {
   moka:   '#60A5FA',
   wonhee: '#34D399',
   iroha:  '#FBBF24',
-};
-
-// Per-member overrides when an era's unlock behavior differs from the default
-const MEMBER_ERA_OVERRIDES: Record<string, Record<string, Partial<EraConfig>>> = {
-  wonhee: {
-    run:  { unlockType: 'video', unlockRequirement: 'aim-high' },
-    misc: { unlockType: 'default', unlockRequirement: 0 },
-  },
 };
 
 // Per-card overrides for special photocards.
@@ -118,9 +110,7 @@ function generatePhotoCardData(): CharacterPhotoCards {
 
       group.sort((a, b) => a.num - b.num);
 
-      const baseConfig = ERA_CONFIG[eraPrefix];
-      const memberOverrides = MEMBER_ERA_OVERRIDES[memberId]?.[eraPrefix] || {};
-      const config = { ...baseConfig, ...memberOverrides };
+      const config = ERA_CONFIG[eraPrefix];
 
       eras.push({
         era: config.name,
