@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Dimensions,
   Modal,
@@ -45,6 +45,13 @@ const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   const playerHeight = Math.min(SCREEN_WIDTH * (9 / 16), SCREEN_HEIGHT - 80);
   const canNavigate = playHistory.length > 0 || autoPlayQueue.length > 0;
+  const accumulatedNativeTimeRef = useRef(0);
+  const lastNativeTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    accumulatedNativeTimeRef.current = 0;
+    lastNativeTimeRef.current = null;
+  }, [selectedVideo?.id]);
 
   return (
     <Modal
@@ -108,11 +115,22 @@ const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     if (state === 'ended') onVideoEnd();
                   }}
                   onProgress={(progress: { currentTime: number; duration: number }) => {
-                    const percentWatched = progress.currentTime / progress.duration;
-                    console.log(`Native: Progress ${(percentWatched * 100).toFixed(1)}%`);
-                    if (percentWatched >= 0.9 && !hasRewarded) {
-                      console.log('Native: 90% watched! Triggering reward...');
-                      onVideoComplete();
+                    const { currentTime, duration } = progress;
+                    if (duration > 0) {
+                      if (lastNativeTimeRef.current !== null) {
+                        const delta = currentTime - lastNativeTimeRef.current;
+                        if (delta > 0 && delta <= 3) {
+                          accumulatedNativeTimeRef.current += delta;
+                        }
+                      }
+                      lastNativeTimeRef.current = currentTime;
+
+                      const percentWatched = accumulatedNativeTimeRef.current / duration;
+                      console.log(`Native: Accumulated ${(percentWatched * 100).toFixed(1)}% watched`);
+                      if (percentWatched >= 0.9 && !hasRewarded) {
+                        console.log('Native: 90% watched! Triggering reward...');
+                        onVideoComplete();
+                      }
                     }
                   }}
                 />

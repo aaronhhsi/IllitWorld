@@ -10,6 +10,8 @@ const WebYouTubePlayer: React.FC<{
   const playerRef = useRef<any>(null);
   const rewardedRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const accumulatedTimeRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
   // Store callbacks in refs so the effect doesn't depend on them
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
@@ -18,6 +20,8 @@ const WebYouTubePlayer: React.FC<{
 
   useEffect(() => {
     rewardedRef.current = false;
+    accumulatedTimeRef.current = 0;
+    lastTimeRef.current = null;
     if (!wrapperRef.current) return;
 
     // Create a disposable child element for YT.Player to replace
@@ -38,12 +42,22 @@ const WebYouTubePlayer: React.FC<{
             intervalRef.current = setInterval(() => {
               try {
                 if (playerRef.current && playerRef.current.getCurrentTime && !rewardedRef.current) {
+                  const playerState = playerRef.current.getPlayerState?.() ?? -1;
                   const currentTime = playerRef.current.getCurrentTime();
                   const duration = playerRef.current.getDuration();
 
                   if (duration > 0) {
-                    const percentWatched = currentTime / duration;
-                    console.log(`Web: Progress ${(percentWatched * 100).toFixed(1)}%`);
+                    // Only accumulate time while actually playing (state 1), guarding against seeks
+                    if (playerState === 1 && lastTimeRef.current !== null) {
+                      const delta = currentTime - lastTimeRef.current;
+                      if (delta > 0 && delta <= 3) {
+                        accumulatedTimeRef.current += delta;
+                      }
+                    }
+                    lastTimeRef.current = currentTime;
+
+                    const percentWatched = accumulatedTimeRef.current / duration;
+                    console.log(`Web: Accumulated ${(percentWatched * 100).toFixed(1)}% watched`);
 
                     if (percentWatched >= 0.9) {
                       console.log('Web: 90% watched! Triggering reward...');
