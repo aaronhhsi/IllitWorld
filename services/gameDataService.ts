@@ -18,6 +18,15 @@ export interface UserGameData {
   lastUpdated: number;
 }
 
+// Fetch the set of approved YouTube video IDs from xp_videos
+export const fetchApprovedVideoIds = async (): Promise<Set<string>> => {
+  const { data, error } = await supabase
+    .from('xp_videos')
+    .select('youtube_id');
+  if (error || !data) return new Set();
+  return new Set(data.map((r: { youtube_id: string }) => r.youtube_id));
+};
+
 // Save user's game data to Supabase (upsert — insert or update)
 export const saveGameData = async (userId: string, gameData: UserGameData): Promise<void> => {
   try {

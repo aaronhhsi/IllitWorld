@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "ILLIT World",
+  "version": "1.0.0",
+  "description": "Level up your ILLIT members while watching their YouTube content!",
+  "permissions": ["storage", "identity", "tabs"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://fuqxdgywfliceqvlzhrl.supabase.co/*",
+    "https://illit-world.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "illit-world@illit-world.vercel.app",
+      "strict_min_version": "109.0"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://illit-world.vercel.app/*"],
+      "js": ["webapp-sync.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

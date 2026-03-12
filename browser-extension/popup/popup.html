@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ILLIT World</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="header">
+    <span class="logo" id="logo-link" style="cursor:pointer">🌸 ILLIT World</span>
+  </div>
+
+  <!-- Not signed in -->
+  <div id="view-signedout" class="view hidden">
+    <p class="hint">Sign in to earn XP while watching ILLIT on YouTube!</p>
+    <button id="btn-signin" class="btn btn-primary">Sign in with Google</button>
+  </div>
+
+  <!-- Signed in -->
+  <div id="view-signedin" class="view hidden">
+    <div id="watching-banner" class="banner hidden">
+      <span class="dot"></span>
+      <span id="watching-title"></span>
+    </div>
+
+
+    <div class="members" id="members-list"></div>
+
+    <div class="footer">
+      <span id="user-email" class="email"></span>
+      <button id="btn-signout" class="btn btn-ghost">Sign out</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="view-loading" class="view">
+    <p class="hint">Loading...</p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

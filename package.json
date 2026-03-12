@@ -9,7 +9,9 @@
     "web": "npx expo start --web",
     "lint": "expo lint",
     "process-images": "node ./scripts/process-images.js",
-    "image-tool": "node ./scripts/image-tool-server.js"
+    "image-tool": "node ./scripts/image-tool-server.js",
+    "extension:videos": "node ./scripts/generate-extension-videos.mjs",
+    "extension:build": "node ./scripts/build-extension.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

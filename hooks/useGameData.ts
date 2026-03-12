@@ -6,7 +6,7 @@ import { loadGameData, saveGameData } from '../services/gameDataService';
 export function useGameData() {
   const { user } = useAuth();
   const [characters, setCharacters] = useState<Character[]>(initialCharacters);
-  const [showPhotos, setShowPhotos] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(true);
   const [watchedVideos, setWatchedVideos] = useState<Record<string, number>>({});
   const [favoriteVideos, setFavoriteVideos] = useState<Record<string, boolean>>({});
   const [selectedBackground, setSelectedBackground] = useState<string>('japanese-classroom');

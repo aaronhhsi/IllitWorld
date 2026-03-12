@@ -16,6 +16,7 @@ import {
 } from '../constants/gameConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameData } from '../hooks/useGameData';
+import { fetchApprovedVideoIds } from '../services/gameDataService';
 import { useVideoPlayer, VideoFilter } from '../hooks/useVideoPlayer';
 
 interface Position {
@@ -25,6 +26,11 @@ interface Position {
 
 export default function HomeScreen() {
   const { user, signInWithGoogle, signOut } = useAuth();
+  const approvedVideoIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchApprovedVideoIds().then(ids => { approvedVideoIds.current = ids; });
+  }, []);
 
   const {
     characters,
@@ -57,7 +63,8 @@ export default function HomeScreen() {
   const positionKey = `${screenDimensions.width}-${screenDimensions.height}-${characters.length}`;
   const currentPositionKey = useRef<string>('');
 
-  const handleVideoReward = ({ video, secondsWatched }: { video: { id: string; duration: number }; secondsWatched: number }) => {
+  const handleVideoReward = ({ video, secondsWatched }: { video: { id: string; youtubeId: string; duration: number }; secondsWatched: number }) => {
+    if (!approvedVideoIds.current.has(video.youtubeId)) return;
     const xpEarned = secondsWatched;
     if (!watchedVideos[video.id]) {
       setWatchedVideos(prev => ({ ...prev, [video.id]: Date.now() }));
@@ -307,6 +314,8 @@ export default function HomeScreen() {
         setCharacters={setCharacters}
         onSignIn={signInWithGoogle}
         onSignOut={signOut}
+        showPhotos={showPhotos}
+        setShowPhotos={setShowPhotos}
       />
     </View>
   );

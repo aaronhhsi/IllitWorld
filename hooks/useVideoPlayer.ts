@@ -94,7 +94,7 @@ export function useVideoPlayer({
   const handleVideoComplete = (percentageWatched: number = 0.9) => {
     if (!selectedVideo || hasRewarded) return;
     setHasRewarded(true);
-    const secondsWatched = Math.floor(selectedVideo.duration * percentageWatched);
+    const secondsWatched = selectedVideo.duration;
     onVideoReward({ video: selectedVideo, secondsWatched });
     console.log(`Awarded ${secondsWatched} XP (${(percentageWatched * 100).toFixed(0)}% watched)!`);
   };
